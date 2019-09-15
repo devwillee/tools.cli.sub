@@ -1,5 +1,7 @@
 # tools.cli.sub
 
+*Caution: This project is currently on EXPERIMENTAL!*
+
 [tools.cli](https://github.com/clojure/tools.cli) with sub-command processor.
 
 By default, all commands include a "--help" option.
@@ -35,15 +37,16 @@ See below examples.
                                    :handler     (fn [arguments options]
                                                   ;; Do something...
                                                   )}
-                            :find {:options     [size-opt]
-                                   :description {:arguments "[FILE NAME]"
-                                                 :usage     "find matched files"}
-                                   :handler     (fn [arguments options]
-                                                  ;; Do something...
-                                                  (cond
-                                                    (empty? arguments) (throw (IllegalArgumentException. "File name is requried!"))
-                                                    :else (println "Done."))
-                                                  )}}}
+                            :find {:options              [size-opt]
+                                   :description          {:arguments "[FILE NAME]"
+                                                          :usage     "find matched files"}
+                                   :pass-if-no-arguments true
+                                   :handler              (fn [arguments options]
+                                                           ;; Do something...
+                                                           (cond
+                                                             (empty? arguments) (throw (IllegalArgumentException. "File name is requried!"))
+                                                             :else (println "Done."))
+                                                           )}}}
 
    :find     {:alias [:file :find]}})
 ```
@@ -89,8 +92,9 @@ See below examples.
    :command ["file" "find"]}
 
 
-;; They all output the same result.
+;; Test alias. 
 
+;;; Arguments are not input, but it will be pass.
 (cli-sub/parser commands "find")
 #_{:options {},
    :arguments [],
@@ -109,19 +113,67 @@ See below examples.
 ```
 
 ### with Supervisor
-"supervisor" is a preprocessor that handles common tasks.
+"supervisor" is a post-processor that handles common tasks.
 Using this effectively reduces the boiler-plate.
 
 It evaluates the handler of each command if there is no "help" option and no error occurs.
 
 ```clojure
-(-> (cli-sub/parser commands "file" "find")
-    cli-sub/supervisor)
-#_ CompilerException java.lang.IllegalArgumentException: File name is requried!, compiling:(D:/project/tools.cli.sub/test/tools/cli/sub/test.clj:54:1)
+(def handlers {:help   (fn [usage]
+                         (println usage))
+               :errors (fn [errors]
+                         (println errors))})
 
-(-> (cli-sub/parser commands "file" "find" "hello_clojure.clj")
-    cli-sub/supervisor)
-#_ Done.
+(cli-sub/parser-with-supervisor commands handlers
+                                "")
+;Usage: program [options] action
+;
+;Main usage...
+;
+;Command:
+;file              file commands
+;
+;Options
+;-h, --help
+
+
+(cli-sub/parser-with-supervisor commands handlers
+                                "file")
+;Usage: program file [sub command]
+;
+;file commands
+;
+;Sub command:
+;find              find matched files
+;ls                Show file list
+;
+;Options
+;-h, --help
+
+(cli-sub/parser-with-supervisor commands handlers
+                                "file" "find")
+;Arguments are required: [FILE NAME]
+
+(cli-sub/parser-with-supervisor commands handlers
+                                "file" "find" "hello_clojure.clj")
+;Done.
+
+(cli-sub/parser-with-supervisor commands handlers
+                                "find")
+;Arguments are required: [FILE NAME]
+
+(cli-sub/parser-with-supervisor commands handlers
+                                "find" "-h")
+;Usage: program [options] action
+;
+;find matched files
+;
+;Command:
+;file              file commands
+;
+;Options
+;-h, --help
+;--size SIZE  result size
 ```
 
 ## License

@@ -44,7 +44,7 @@
         sub-command-form (if next-sub-command
                            (recur rest-args (conj cmds next-sub-command))
 
-                           ;; sub-command가 있는데, 입력하지 않은 경우 : "-h" 옵션과 동일 취급
+                           ;; sub-command exists, but it not input
                            (merge
                              {:command   cmds
                               :arguments (conj cmds "-h")}
@@ -64,28 +64,95 @@
         ))))
 
 (defn parser [spec & args]
-  (if (or (empty? args) (some #{(first args)} ["help" "-h" "--help" ""]))
-    (let [result (cli/parse-opts ["-h"] (options-with-help-option nil))
-          root-key :__root__]
-      (merge result
-             (get spec root-key)
-             {:command []}))
+  (let [flatten-args (flatten args)]
+    (if (or (empty? flatten-args) (some #{(first flatten-args)} ["help" "-h" "--help" ""]))
+      (let [result (cli/parse-opts ["-h"] (options-with-help-option nil))
+            root-key :__root__]
+        (merge result
+               (get spec root-key)
+               {:command []}))
 
-    (let [{:keys [options _description _handler _command arguments] :as command-form}
-          (sub-command-parser spec args)
+      (let [{:keys [options _description _handler _command arguments] :as command-form}
+            (sub-command-parser spec flatten-args)
 
-          result (cli/parse-opts arguments (options-with-help-option options))]
+            result (cli/parse-opts arguments (options-with-help-option options))]
 
-      (merge result (dissoc command-form
-                            :options
-                            :arguments)))))
+        (merge result (dissoc command-form
+                              :options
+                              :arguments))))))
 
-(defn supervisor [{:keys [options arguments summary errors description handler command]
-                          :as   parsed-command-form}]
+(defn- command-usage [spec command]
+  (let [root? (empty? command)
+        alias (:alias (get-in spec (map keyword command)))
+        {:keys [options description]} (if root?
+                                        (:__root__ spec)
+                                        (-> (if alias
+                                              alias
+                                              command)
+                                            (sub-command-keys)
+                                            (->> (get-in spec))))]
+    (str "Usage: program "
+         (when (seq command)
+           (str (str/join " " command) " "))
+         (:arguments description)
+         (when (seq options)
+           " [options] ")
+         )))
+
+(defn- sub-commands-description [spec command]
+  (let [root? (empty? command)
+        alias (:alias (get-in spec (map keyword command)))
+        form (if root?
+               (-> spec
+                   (dissoc :__root__)
+                   (->> (filter (fn [[_ {:keys [alias]}]] (not alias)))))
+
+               (-> (if alias
+                     alias
+                     command)
+                   (sub-command-keys)
+                   vec
+                   (conj :sub-command)
+                   (->> (get-in spec))))]
+    (->> form
+         sort
+         (map (fn [[sub-command {:keys [description]}]]
+                (str (format "  %-18s" (name sub-command))
+                     (:usage description))))
+         (str/join \newline))))
+
+(defn- usage-str [spec {:keys [command description summary] :as _command-form}]
+  (let [{:keys [_arguments usage]} description]
+    (->> [(command-usage spec command)
+          ""
+          (str "   " usage)
+          (when-let [desc (str/trim (sub-commands-description spec command))]
+            (when (seq desc)
+              (let [prefix (if (seq command)
+                             "Sub command"
+                             "Command")]
+                (str \newline prefix ":" \newline "  " desc \newline))))
+          "Options"
+          summary
+          ""]
+         (str/join \newline))))
+
+(defn- supervisor [spec
+                   {:keys [_help _errors] :as handlers}
+                   {:keys [options arguments _summary errors description pass-if-no-arguments handler _command]
+                    :as   parsed-command-form}]
   (let [help? (:help options)]
 
     (cond
-      help? (select-keys parsed-command-form [:command :summary :description])
-      errors (select-keys parsed-command-form [:command :errors])
-      :else (handler arguments options))
-    ))
+      help? ((:help handlers) (usage-str spec parsed-command-form))
+      errors ((:errors handlers) errors)
+
+      (or (not pass-if-no-arguments)
+          (and (:arguments description) (empty? arguments)))
+      ((:errors handlers) (str "Arguments are required: " (:arguments description)))
+
+      :else (handler arguments options))))
+
+(defn parser-with-supervisor [spec {:keys [_help _errors] :as handlers} & args]
+  (->> (parser spec (flatten args))
+       (supervisor spec handlers)))

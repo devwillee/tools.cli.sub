@@ -18,15 +18,16 @@
                                    :handler     (fn [arguments options]
                                                   ;; Do something...
                                                   )}
-                            :find {:options     [size-opt]
-                                   :description {:arguments "[FILE NAME]"
-                                                 :usage     "find matched files"}
-                                   :handler     (fn [arguments options]
-                                                  ;; Do something...
-                                                  (cond
-                                                    (empty? arguments) (throw (IllegalArgumentException. "File name is requried!"))
-                                                    :else (println "Done."))
-                                                  )}}}
+                            :find {:options              [size-opt]
+                                   :description          {:arguments "[FILE NAME]"
+                                                          :usage     "find matched files"}
+                                   :pass-if-no-arguments true
+                                   :handler              (fn [arguments options]
+                                                           ;; Do something...
+                                                           (cond
+                                                             (empty? arguments) (throw (IllegalArgumentException. "File name is requried!"))
+                                                             :else (println "Done."))
+                                                           )}}}
 
    :find     {:alias [:file :find]}})
 
@@ -34,7 +35,6 @@
 
 
 (cli-sub/parser commands "")
-
 
 (cli-sub/parser commands "file")
 (cli-sub/parser commands "file" "find")
@@ -45,20 +45,25 @@
 
 
 
-(-> (cli-sub/parser commands "")
-    cli-sub/supervisor)
+(def handlers {:help   (fn [usage]
+                         (println usage))
+               :errors (fn [errors]
+                         (println errors))})
 
-(-> (cli-sub/parser commands "file")
-    cli-sub/supervisor)
+(cli-sub/parser-with-supervisor commands handlers
+                                "")
 
-(-> (cli-sub/parser commands "file" "find")
-    cli-sub/supervisor)
+(cli-sub/parser-with-supervisor commands handlers
+                                "file")
 
-(-> (cli-sub/parser commands "file" "find" "hello_clojure.clj")
-    cli-sub/supervisor)
+(cli-sub/parser-with-supervisor commands handlers
+                                "file" "find")
 
-(-> (cli-sub/parser commands "find")
-    cli-sub/supervisor)
+(cli-sub/parser-with-supervisor commands handlers
+                                "file" "find" "hello_clojure.clj")
 
-(-> (cli-sub/parser commands "find" "-h")
-    cli-sub/supervisor)
+(cli-sub/parser-with-supervisor commands handlers
+                                "find")
+
+(cli-sub/parser-with-supervisor commands handlers
+                                "find" "-h")
