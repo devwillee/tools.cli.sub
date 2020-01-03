@@ -178,7 +178,7 @@ It evaluates the handler of each command if there is no "help" option and no err
 
 ## License
 
-Copyright © 2019 devwillee
+Copyright © 2019 xeyez
 
 This program and the accompanying materials are made available under the
 terms of the Eclipse Public License 2.0 which is available at
